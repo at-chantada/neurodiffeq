@@ -4,6 +4,7 @@ import warnings
 from .generators import Generator1D
 from .generators import Generator2D
 from .generators import Generator3D
+from .generators import GeneratorND
 from .generators import GeneratorSpherical
 from .generators import BatchGenerator
 from .generators import ConcatGenerator

@@ -306,6 +306,140 @@ class Generator3D(BaseGenerator):
         return d
 
 
+class GeneratorND(BaseGenerator):
+    r"""An example generator for generating N-D training points.
+
+        :param grid:
+            The discretization of the N dimensions.
+            If we want to generate points on a :math:`n_1 \times n_2 \times ... \times n_N` grid,
+            then `grid` is `(n_1, n_2, ... , n_N)`.
+            Defaults to `(10, 10)`.
+        :type grid: tuple[int, int, ... , int], or it can be int if N=1, optional
+        :param r_min:
+            The lower bound of N dimensions.
+            If we only care about :math:`r[0] \geq r[0]_0`, :math:`r[1] \geq r[1]_0`, ... , and :math:`r[N] \geq r[N]_0`
+            then `r_min` is `(r[0]_0, r[1]_0, ... , r[N]_0)`.
+            Defaults to `(0.0, 0.0)`.
+        :type r_min: tuple[float, ... , float], or it can be int if N=1, optional
+        :param r_max:
+            The upper boound of 2 dimensions.
+            If we only care about :math:`r[0] \leq r[0]_1`, :math:`r[1] \leq r[1]_1`, ... , and :math:`r[N] \geq r[N]_0`
+            then `r_max` is `(r[0]_1, r[1]_1, ... , r[N]_1)`.
+            Defaults to `(1.0, 1.0)`.
+        :type r_max: tuple[float, ... , float], or it can be int if N=1, optional
+        :param methods:
+            The a list of the distributions of each of the 1-D points generated that make the total N-D points.
+
+            - If set to 'uniform',
+              the points will be drew from a uniform distribution Unif(r_min[i], r_max[i]).
+            - If set to 'equally-spaced',
+              the points will be fixed to a set of linearly-spaced points that go from r_min[i] to r_max[i].
+            - If set to 'log-spaced',
+              the points will be fixed to a set of log-spaced points that go from r_min[i] to r_max[i].
+            - If set to 'backwards-log-spaced',
+              the points will be fixed to a set of backwards-log-spaced points that go from r_min[i] to r_max[i].
+
+            Defaults to ['equally-spaced', 'equally-spaced'].
+        :type methods: list[str, str, ... , str], or it can be str if N=1, optional
+        :param noisy:
+            if set to True a normal noise will be added to all of the N set of points that make the generator.
+            Defaults to True.
+        :type: methods: bool
+        :param r_noise_std:
+            The standard deviation of the noise on the N dimensions.
+            If not specified, the default value will be
+            (``grid step size on r[0] dimension`` / 4, ``grid step size on r[1] dimension`` / 4,
+             ... , `grid step size on r[0] dimension`` / 4).
+        :type r_noise_std: tuple[int, int, ... , int], optional, defaults to None
+        :raises ValueError: When provided with unknown methods.
+    """
+
+    def __init__(self, grid=(10, 10), r_min=(0.0, 0.0), r_max=(1.0, 1.0),
+                 methods=['equally-spaced', 'equally-spaced'], noisy=True, r_noise_std=None):
+
+        super(GeneratorND, self).__init__()
+        self.size = np.prod(grid)
+        self.grid = grid
+        self.r_min = r_min
+        self.r_max = r_max
+        self.methods = methods
+        self.noisy = noisy
+        self.r_noise_std = r_noise_std
+        r = []
+
+        if isinstance(grid, int):
+            grid = (grid,)
+
+        if isinstance(r_min, float) or isinstance(r_min, int):
+            r_min = (r_min,)
+
+        if isinstance(r_max, float) or isinstance(r_max, int):
+            r_max = (r_max,)
+
+        if isinstance(methods, str):
+            methods = [methods]
+
+        self.dimensions = len(methods)
+        N = self.dimensions
+
+        for i in range(self.dimensions):
+
+            method = methods[i]
+
+            if method == 'equally-spaced':
+                x = torch.linspace(r_min[i], r_max[i], grid[i], requires_grad=True)
+
+            elif method == 'uniform':
+                x = torch.zeros(grid[i], requires_grad=True)
+                x = x + torch.rand(grid[i]) * (r_max[i] - r_min[i]) + r_min[i]
+
+            elif method == 'log-spaced':
+                r_min_exp = np.log10(r_min[i])
+                r_max_exp = np.log10(r_max[i])
+                x = torch.logspace(r_min_exp, r_max_exp, grid[i], requires_grad=True)
+
+            elif method == 'backwards-log-spaced':
+                r_min_exp = np.log10(r_min[i])
+                r_max_exp = np.log10(r_max[i])
+                r_total = r_min[i] + r_max[i]
+                x = r_total - torch.flip(torch.logspace(r_min_exp, r_max_exp, grid[i], requires_grad=True), [0])
+            else:
+                raise ValueError(f'Unknown method: {method}')
+
+            r.append(x)
+
+        grid_r = torch.meshgrid(r)
+
+        self.grid_r = [grid_r[j].flatten() for j in range(N)]
+
+        if noisy is True:
+
+            if r_noise_std:
+                self.noise_rstd = r_noise_std
+            else:
+                self.noise_rstd = [((r_max[k] - r_min[k]) / grid[k]) / 4.0 for k in range(N)]
+
+            self.getter = lambda: tuple(torch.normal(mean=self.grid_r[m], std=self.noise_rstd[m]) for m in range(N))
+        elif noisy is False:
+
+            self.getter = lambda: tuple(self.grid_r[n] for n in range(N))
+
+    def get_examples(self):
+        return self.getter()
+
+    def _internal_vars(self) -> dict:
+        d = super(GeneratorND, self)._internal_vars()
+        d.update(dict(
+            grid=self.grid,
+            r_min=self.r_min,
+            r_max=self.r_max,
+            methods=self.methods,
+            noisy=self.noisy,
+            r_noise_std=self.r_noise_std
+        ))
+        return d
+
+
 class GeneratorSpherical(BaseGenerator):
     r"""A generator for generating points in spherical coordinates.
 
