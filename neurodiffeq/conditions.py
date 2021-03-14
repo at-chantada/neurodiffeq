@@ -33,7 +33,7 @@ class BaseCondition:
         :return: The re-parameterized output of the network.
         :rtype: `torch.Tensor`
 
-        .. note:: 
+        .. note::
             This method is **abstract** for BaseCondition
         """
         raise ValueError(f"Abstract {self.__class__.__name__} cannot be parameterized")  # pragma: no cover
@@ -205,6 +205,136 @@ class IVP(BaseCondition):
             return self.u_0 + (1 - torch.exp(-t + self.t_0)) * output_tensor
         else:
             return self.u_0 + (t - self.t_0) * self.u_0_prime + ((1 - torch.exp(-t + self.t_0)) ** 2) * output_tensor
+
+
+class IVP_alt(BaseCondition):
+    r"""An initial value problem of one of the following forms:
+
+    - Dirichlet condition: :math:`u(t_0)=u_0`.
+    - Neumann condition: :math:`\displaystyle\frac{\partial u}{\partial t}\bigg|_{t = t_0} = u_0'`.
+
+    :param t_0: The initial time.
+    :type t_0: float
+    :param u_0: The initial value of :math:`u`. :math:`u(t_0)=u_0`.
+    :type u_0: float
+    :param u_0_prime:
+        The initial derivative of :math:`u` w.r.t. :math:`t`.
+        :math:`\displaystyle\frac{\partial u}{\partial t}\bigg|_{t = t_0} = u_0'`.
+        Defaults to None.
+    :type u_0_prime: float, optional
+    """
+
+    @deprecated_alias(x_0='u_0', x_0_prime='u_0_prime')
+    def __init__(self, t_0, u_0=None, u_0_prime=None):
+        super().__init__()
+        self.t_0, self.u_0, self.u_0_prime = t_0, u_0, u_0_prime
+
+    def enforce(self, net, t):
+
+        def ANN(t):
+            out = net(torch.cat([t], dim=1))
+            if self.ith_unit is not None:
+                out = out[:, self.ith_unit].view(-1, 1)
+            return out
+        ut = ANN(t)
+        ut0 = ANN(self.t_0)
+
+        return self.parameterize(ut, t, ut0)
+
+    def parameterize(self, ut, t, ut0):
+
+        if self.u_0_prime is None:
+            return self.u_0 + ut - ut0
+        else:
+            return self.u_0 + (t - self.t_0) * self.u_0_prime + ((1 - torch.exp(-t + self.t_0)) ** 2) * ut
+
+
+class IVP_bundle(BaseCondition):
+
+    @deprecated_alias(x_0='u_0', x_0_prime='u_0_prime')
+    def __init__(self, t_0, u_0=None, u_0_prime=None):
+        super().__init__()
+        self.t_0, self.u_0, self.u_0_prime = t_0, u_0, u_0_prime
+
+    def enforce(self, net, t, *parameters):
+
+        def ANN(*r):
+            out = net(torch.cat([*r], dim=1))
+            if self.ith_unit is not None:
+                out = out[:, self.ith_unit].view(-1, 1)
+            return out
+        utp = ANN(t, *parameters)
+
+        return self.parameterize(utp, t, *parameters)
+
+    def parameterize(self, utp, t, *parameters):
+
+        if self.u_0_prime is None:
+            return self.u_0(self.t_0, *parameters) + (1 - torch.exp(-t + self.t_0)) * utp
+        else:
+            return self.u_0(self.t_0, *parameters) + (t - self.t_0) * self.u_0_prime(self.t_0, *parameters) + \
+                ((1 - torch.exp(-t + self.t_0)) ** 2) * utp
+
+
+class IVP_bundle_alt(BaseCondition):
+
+    @deprecated_alias(x_0='u_0', x_0_prime='u_0_prime')
+    def __init__(self, t_0, u_0=None, u_0_prime=None):
+        super().__init__()
+        self.t_0, self.u_0, self.u_0_prime = t_0, u_0, u_0_prime
+
+    def enforce(self, net, t, *parameters):
+
+        def ANN(*r):
+            out = net(torch.cat([*r], dim=1))
+            if self.ith_unit is not None:
+                out = out[:, self.ith_unit].view(-1, 1)
+            return out
+        utp = ANN(t, *parameters)
+        t0 = self.t_0 * torch.ones_like(t, requires_grad=True)
+        ut0p = ANN(t0, *parameters)
+
+        return self.parameterize(utp, t, ut0p, *parameters)
+
+    def parameterize(self, utp, t, ut0p, *parameters):
+
+        if self.u_0_prime is None:
+            return self.u_0(self.t_0, *parameters) + utp - ut0p
+        else:
+            return self.u_0(self.t_0, *parameters) + (t - self.t_0) * self.u_0_prime(self.t_0, *parameters) + \
+                ((1 - torch.exp(-t + self.t_0)) ** 2) * utp
+
+
+class IVP_bundle_alt2(BaseCondition):
+
+    @deprecated_alias(x_0='u_0', x_0_prime='u_0_prime')
+    def __init__(self, t_0, parameter_0, u_0):
+        super().__init__()
+        self.t_0, self.parameter_0, self.u_0 = t_0, parameter_0, u_0
+
+    def enforce(self, net, t, parameter, *parameters):
+
+        def ANN(*r):
+            out = net(torch.cat([*r], dim=1))
+            if self.ith_unit is not None:
+                out = out[:, self.ith_unit].view(-1, 1)
+            return out
+
+        t0 = self.t_0 * torch.ones_like(t, requires_grad=True)
+        # p0 = self.parameter_0 * torch.ones_like(parameter, requires_grad=True)
+        utp = ANN(t, parameter, *parameters)
+        ut0p = ANN(t0, parameter, *parameters)
+        # utp0 = ANN(t, p0, *parameters)
+
+        return self.parameterize(utp, t, ut0p, parameter, *parameters)
+
+    def parameterize(self, utp, t, ut0p, parameter, *parameters):
+
+        A = self.u_0(self.t_0, parameter, *parameters) + (1 - parameter - self.parameter_0) * \
+            (self.u_0(t, self.parameter_0, *parameters) - self.u_0(self.t_0, self.parameter_0, *parameters))
+        # return A + (t - self.t_0) * (1 - torch.exp(parameter - self.parameter_0)) * utp
+        # return A + (1 - torch.exp(t - self.t_0)) * (1 - torch.exp(parameter - self.parameter_0)) * utp
+        return A + (utp - ut0p) * (1 - torch.exp(parameter - self.parameter_0)) * utp
 
 
 class DirichletBVP(BaseCondition):
@@ -525,7 +655,7 @@ class IBVP1D(BaseCondition):
 
 
 class DoubleEndedBVP1D(BaseCondition):
-      
+
     r"""A boundary condition on a 1-D range where :math:`x\in[x_0, x_1]`.
     The conditions should have the following parts:
 
@@ -553,6 +683,7 @@ class DoubleEndedBVP1D(BaseCondition):
         Dirichlet conditions (by specifying only ``x_min_val`` and ``x_max_val``) and ``force`` is set to True in
         EnsembleCondition's constructor.
     """
+
     def __init__(
             self, x_min, x_max,
             x_min_val=None, x_min_prime=None,
@@ -604,7 +735,7 @@ class DoubleEndedBVP1D(BaseCondition):
             return self.parameterize(ux, x, ux0, x0, ux1, x1)
         else:
             raise NotImplementedError('Sorry, this boundary condition is not implemented.')
-    
+
     def parameterize(self, u, x, *additional_tensors):
         r"""Re-parameterizes outputs such that the boundary conditions are satisfied.
 
@@ -664,29 +795,28 @@ class DoubleEndedBVP1D(BaseCondition):
             return self._parameterize_nn(u, x, x_tilde, *additional_tensors)
         else:
             raise NotImplementedError('Sorry, this boundary condition is not implemented.')
-    
-    
+
     # When we have Dirichlet boundary conditions on both ends of the domain:
     def _parameterize_dd(self, ux, x, x_tilde):
         Ax = self.x_min_val * (1-x_tilde) + self.x_max_val * (x_tilde)
         return Ax + x_tilde * (1 - x_tilde) * ux
-    
+
     # When we have Dirichlet boundary condition on the left end of the domain
     # and Neumann boundary condition on the right end of the domain:
     def _parameterize_dn(self, ux, x, x_tilde, ux1, x1):
         Ax = (1 - x_tilde) * self.x_min_val + 0.5 * x_tilde ** 2 * self.x_max_prime * (self.x_max - self.x_min)
         return Ax + x_tilde * (ux - ux1 + self.x_min_val - diff(ux1, x1) * (self.x_max - self.x_min))
-        #Ax = self.x_min_val + (x - self.x_min) * self.x_max_prime
-        #return Ax + x_tilde * (ux - (self.x_max - self.x_min) * diff(ux1, x1) - ux1)
-    
+        # Ax = self.x_min_val + (x - self.x_min) * self.x_max_prime
+        # return Ax + x_tilde * (ux - (self.x_max - self.x_min) * diff(ux1, x1) - ux1)
+
     # When we have Neumann boundary condition on the left end of the domain
     # and Dirichlet boundary condition on the right end of the domain:
     def _parameterize_nd(self, ux, x, x_tilde, ux0, x0):
         Ax = x_tilde * self.x_max_val - 0.5 * (1 - x_tilde) ** 2 * self.x_min_prime * (self.x_max - self.x_min)
         return Ax + (1 - x_tilde) * (ux - ux0 + self.x_max_val + diff(ux0, x0) * (self.x_max - self.x_min))
-        #Ax = self.x_max_val + (x - self.x_max) * self.x_min_prime
-        #return Ax + (1 - x_tilde) * (ux + (self.x_max - self.x_min) * diff(ux0, x0) - ux0)
-    
+        # Ax = self.x_max_val + (x - self.x_max) * self.x_min_prime
+        # return Ax + (1 - x_tilde) * (ux + (self.x_max - self.x_min) * diff(ux0, x0) - ux0)
+
     # When we have Neumann boundary conditions on both ends of the domain:
     def _parameterize_nn(self, ux, x, x_tilde, ux0, x0, ux1, x1):
         Ax = - 0.5 * (1 - x_tilde) ** 2 * (self.x_max - self.x_min) * self.x_min_prime + 0.5 * x_tilde ** 2 * (self.x_max - self.x_min) * self.x_max_prime
