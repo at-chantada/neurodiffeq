@@ -19,15 +19,15 @@ ExampleGenerator = warn_deprecate_class(Generator1D)
 Monitor = warn_deprecate_class(Monitor1D)
 
 
-def _trial_solution(single_net, nets, ts, conditions):
+def _trial_solution(single_net, nets, conditions, *ts):
     if single_net:  # using a single net
         us = [
-            con.enforce(single_net, ts)
+            con.enforce(single_net, *ts)
             for con in conditions
         ]
     else:  # using multiple nets
         us = [
-            con.enforce(net, ts)
+            con.enforce(net, *ts)
             for con, net in zip(conditions, nets)
         ]
     return us
