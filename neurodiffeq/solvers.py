@@ -339,7 +339,7 @@ class BaseSolver(ABC):
             self.lowest_loss = current_loss
             self.best_nets = deepcopy(self.nets)
 
-    def fit(self, max_epochs, callbacks=(), **kwargs):
+    def fit(self, max_epochs, callbacks=(), progress_bar=False, **kwargs):
         r"""Run multiple epochs of training and validation, update best loss at the end of each epoch.
 
         If ``callbacks`` is passed, callbacks are run, one at a time,
@@ -351,6 +351,10 @@ class BaseSolver(ABC):
             A list of callback functions.
             Each function should accept the ``solver`` instance itself as its **only** argument.
         :rtype callbacks: list[callable]
+        :param progress_bar: if set to True, prints a dynamically updating progressbar, an estimation of how much
+            time is left for the training to be done and the amount of epochs per second that are been computed
+            Defaults to False
+        :type progress_bar: bool
 
         .. note::
             1. This method does not return solution, which is done in the ``.get_solution()`` method.
@@ -367,8 +371,6 @@ class BaseSolver(ABC):
                 raise AttributeError(f'{monitor} doesn\'t have a `check_every` attribute')
             if monitor.check_every is None:
                 monitor.check_every = 100  # legacy default `check_every` for monitors
-
-        progress_bar = kwargs.pop('progress_bar', False)
 
         if progress_bar:
             loop_range = tqdm(range(max_epochs), unit=' epochs')
@@ -956,7 +958,8 @@ class Solution1D_bundle(BaseSolution):
 
 
 class Solver1D_bundle(BaseSolver):
-    r"""A solver class for solving ODEs (single-input differential equations)
+    r"""A solver class for solving ODEs, or a bundle of ODEs for different values of its parameters
+    (single-input differential equations)
 
     :param ode_system:
         The ODE system to solve, which maps a torch.Tensor to a tuple of ODE residuals,
@@ -973,6 +976,16 @@ class Solver1D_bundle(BaseSolver):
         Upper bound of input (start time).
         Ignored if ``train_generator`` and ``valid_generator`` are both set.
     :type t_max: float, optional
+    :param parameters_min:
+        Lower bound of input (parameters).
+        Defaults to None
+        Ignored if ``train_generator`` and ``valid_generator`` are both set.
+    :type parameters_min: float or tuple, optional
+    :param parameters_max:
+        Upper bound of input (parameters).
+        Defaults to None
+        Ignored if ``train_generator`` and ``valid_generator`` are both set.
+    :type parameters_max: float or tuple, optional
     :param nets:
         List of neural networks for parameterized solution.
         If provided, length of ``nets`` must equal that of ``conditions``
