@@ -230,14 +230,14 @@ class IVP_alt(BaseCondition):
         self.t_0, self.u_0, self.u_0_prime = t_0, u_0, u_0_prime
 
     def enforce(self, net, t):
-
         def ANN(t):
             out = net(torch.cat([t], dim=1))
             if self.ith_unit is not None:
                 out = out[:, self.ith_unit].view(-1, 1)
             return out
         ut = ANN(t)
-        ut0 = ANN(self.t_0)
+        t0 = self.t_0 * torch.ones_like(t, requires_grad=True)
+        ut0 = ANN(t0)
 
         return self.parameterize(ut, t, ut0)
 
@@ -250,30 +250,62 @@ class IVP_alt(BaseCondition):
 
 
 class IVP_bundle(BaseCondition):
+    r"""An initial value problem of one of the following forms:
+
+    - Dirichlet condition: :math:`u(t_0,\boldsymbol{\theta})=u_0(\boldsymbol{\theta})`.
+    - Neumann condition: :math:`\displaystyle\frac{\partial u}{\partial t}\bigg|_{t = t_0}(\boldsymbol{\theta}) = u_0'(\boldsymbol{\theta})`.
+
+    Here :math:`\boldsymbol{\theta}=(\theta_{1},\theta_{2},...,\theta_{n})\in\mathbb{R}`,
+    where each :math:`\theta_i` represents a parameter of the ODE system that we want to solve
+
+    :param t_0: The initial time.
+    :type t_0: float
+    :param u_0: The initial value of :math:`u`. :math:`u(t_0,\boldsymbol{\theta})=u_0(\boldsymbol{\theta})`.
+    :type u_0: callable or float
+    :param u_0_prime:
+        The initial derivative of :math:`u` w.r.t. :math:`t`.
+        :math:`\displaystyle\frac{\partial u}{\partial t}\bigg|_{t = t_0}(\boldsymbol{\theta}) = u_0'(\boldsymbol{\theta})`.
+        Defaults to None.
+    :type u_0_prime: callable or float, optional
+    """
 
     @deprecated_alias(x_0='u_0', x_0_prime='u_0_prime')
     def __init__(self, t_0, u_0=None, u_0_prime=None):
         super().__init__()
         self.t_0, self.u_0, self.u_0_prime = t_0, u_0, u_0_prime
 
-    def enforce(self, net, t, *parameters):
+    def parameterize(self, output_tensor, t, *parameters):
+        r"""Re-parameterizes outputs such that the Dirichlet/Neumann condition is satisfied.
 
-        def ANN(*r):
-            out = net(torch.cat([*r], dim=1))
-            if self.ith_unit is not None:
-                out = out[:, self.ith_unit].view(-1, 1)
-            return out
-        utp = ANN(t, *parameters)
+        - For Dirichlet condition, the re-parameterization is
+          :math:`\displaystyle u(t,\boldsymbol{\theta}) = u_0(\boldsymbol{\theta}) + \left(1 - e^{-(t-t_0)}\right) \mathrm{ANN}(t,\boldsymbol{\theta})`
+          where :math:`\mathrm{ANN}` is the neural network.
+        - For Neumann condition, the re-parameterization is
+          :math:`\displaystyle u(t,\boldsymbol{\theta}) = u_0(\boldsymbol{\theta}) + (t-t_0) u'_0(\boldsymbol{\theta}) + \left(1 - e^{-(t-t_0)}\right)^2 \mathrm{ANN}(t,\boldsymbol{\theta})`
+          where :math:`\mathrm{ANN}` is the neural network.
 
-        return self.parameterize(utp, t, *parameters)
+        :param output_tensor: Output of the neural network.
+        :type output_tensor: `torch.Tensor`
+        :param t: Input to the neural network; i.e., sampled time-points; i.e., independent variables.
+        :type t: `torch.Tensor`
+        :return: The re-parameterized output of the network.
+        :rtype: `torch.Tensor`
+        """
 
-    def parameterize(self, utp, t, *parameters):
+        if callable(self.u_0):
+            u_ini = self.u_0(self.t_0, *parameters)
+        elif isinstance(self.u_0, float) or isinstance(self.u_0, int):
+            u_ini = self.u_0
+
+        if callable(self.u_0_prime):
+            u_ini_prime = self.u_0_prime(self.t_0, *parameters)
+        elif isinstance(self.u_0_prime, float) or isinstance(self.u_0_prime, int):
+            u_ini_prime = self.u_0_prime
 
         if self.u_0_prime is None:
-            return self.u_0(self.t_0, *parameters) + (1 - torch.exp(-t + self.t_0)) * utp
+            return u_ini + (1 - torch.exp(-t + self.t_0)) * output_tensor
         else:
-            return self.u_0(self.t_0, *parameters) + (t - self.t_0) * self.u_0_prime(self.t_0, *parameters) + \
-                ((1 - torch.exp(-t + self.t_0)) ** 2) * utp
+            return u_ini + (t - self.t_0) * u_ini_prime + ((1 - torch.exp(-t + self.t_0)) ** 2) * output_tensor
 
 
 class IVP_bundle_alt(BaseCondition):
@@ -308,9 +340,9 @@ class IVP_bundle_alt(BaseCondition):
 class IVP_bundle_alt2(BaseCondition):
 
     @deprecated_alias(x_0='u_0', x_0_prime='u_0_prime')
-    def __init__(self, t_0, parameter_0, u_0):
+    def __init__(self, t_0, parameter_0, u_0, reparam='ANNexp'):
         super().__init__()
-        self.t_0, self.parameter_0, self.u_0 = t_0, parameter_0, u_0
+        self.t_0, self.parameter_0, self.u_0, self.reparam = t_0, parameter_0, u_0, reparam
 
     def enforce(self, net, t, parameter, *parameters):
 
@@ -321,20 +353,32 @@ class IVP_bundle_alt2(BaseCondition):
             return out
 
         t0 = self.t_0 * torch.ones_like(t, requires_grad=True)
-        # p0 = self.parameter_0 * torch.ones_like(parameter, requires_grad=True)
+        p0 = self.parameter_0 * torch.ones_like(parameter, requires_grad=True)
         utp = ANN(t, parameter, *parameters)
         ut0p = ANN(t0, parameter, *parameters)
-        # utp0 = ANN(t, p0, *parameters)
+        utp0 = ANN(t, p0, *parameters)
 
-        return self.parameterize(utp, t, ut0p, parameter, *parameters)
+        return self.parameterize(utp, t, ut0p, p0, utp0, parameter, *parameters)
 
-    def parameterize(self, utp, t, ut0p, parameter, *parameters):
+    def parameterize(self, utp, t, ut0p, p0, utp0, parameter, *parameters):
 
         A = self.u_0(self.t_0, parameter, *parameters) + (1 - parameter - self.parameter_0) * \
             (self.u_0(t, self.parameter_0, *parameters) - self.u_0(self.t_0, self.parameter_0, *parameters))
-        # return A + (t - self.t_0) * (1 - torch.exp(parameter - self.parameter_0)) * utp
-        # return A + (1 - torch.exp(t - self.t_0)) * (1 - torch.exp(parameter - self.parameter_0)) * utp
-        return A + (utp - ut0p) * (1 - torch.exp(parameter - self.parameter_0)) * utp
+
+        if self.reparam == 'linexp':
+            return A + (t - self.t_0) * (1 - torch.exp(parameter - self.parameter_0)) * utp
+
+        elif self.reparam == 'expexp':
+            return A + (1 - torch.exp(t - self.t_0)) * (1 - torch.exp(parameter - self.parameter_0)) * utp
+
+        elif self.reparam == 'ANNexp':
+            return A + (utp - ut0p) * (1 - torch.exp(parameter - self.parameter_0)) * utp  # param default
+
+        elif self.reparam == 'ANNlin':
+            return A + (utp - ut0p) * (parameter - self.parameter_0) * utp  # param 4
+
+        elif self.reparam == 'ANNANN':
+            return A + (utp - ut0p) * (utp - utp0) * utp  # param 5
 
 
 class DirichletBVP(BaseCondition):
