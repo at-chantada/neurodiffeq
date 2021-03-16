@@ -365,6 +365,9 @@ class IVP_bundle_alt2(BaseCondition):
         A = self.u_0(self.t_0, parameter, *parameters) + (1 - parameter - self.parameter_0) * \
             (self.u_0(t, self.parameter_0, *parameters) - self.u_0(self.t_0, self.parameter_0, *parameters))
 
+        # A = self.u_0(self.t_0, parameter, *parameters) + torch.exp(parameter - self.parameter_0) * \
+        #     (self.u_0(t, self.parameter_0, *parameters) - self.u_0(self.t_0, self.parameter_0, *parameters))
+
         if self.reparam == 'linexp':
             return A + (t - self.t_0) * (1 - torch.exp(parameter - self.parameter_0)) * utp
 
