@@ -317,16 +317,16 @@ class GeneratorND(BaseGenerator):
         :type grid: tuple[int, int, ... , int], or it can be int if N=1, optional
         :param r_min:
             The lower bound of N dimensions.
-            If we only care about :math:`r[0] \geq r[0]_0`, :math:`r[1] \geq r[1]_0`, ... , and :math:`r[N] \geq r[N]_0`
-            then `r_min` is `(r[0]_0, r[1]_0, ... , r[N]_0)`.
+            If we only care about :math:`r_1 \geq r_1^{min}`, :math:`r_2 \geq r_2^{min}`, ... ,
+            and :math:`r_N \geq r_N^{min}` then `r_min` is `(r_1_min, r_2_min, ... , r_N_min)`.
             Defaults to `(0.0, 0.0)`.
-        :type r_min: tuple[float, ... , float], or it can be int if N=1, optional
+        :type r_min: tuple[float, ... , float], or it can be float if N=1, optional
         :param r_max:
-            The upper boound of 2 dimensions.
-            If we only care about :math:`r[0] \leq r[0]_1`, :math:`r[1] \leq r[1]_1`, ... , and :math:`r[N] \geq r[N]_0`
-            then `r_max` is `(r[0]_1, r[1]_1, ... , r[N]_1)`.
+            The upper boound of N dimensions.
+            If we only care about :math:`r_1 \leq r_1^{max}`, :math:`r_2 \leq r_2^{max}`, ... ,
+            and :math:`r_N \leq r_N^{max}` then `r_max` is `(r_1_max, r_2_max, ... , r_N_max)`.
             Defaults to `(1.0, 1.0)`.
-        :type r_max: tuple[float, ... , float], or it can be int if N=1, optional
+        :type r_max: tuple[float, ... , float], or it can be float if N=1, optional
         :param methods:
             The a list of the distributions of each of the 1-D points generated that make the total N-D points.
 
@@ -348,8 +348,8 @@ class GeneratorND(BaseGenerator):
         :param r_noise_std:
             The standard deviation of the noise on the N dimensions.
             If not specified, the default value will be
-            (``grid step size on r[0] dimension`` / 4, ``grid step size on r[1] dimension`` / 4,
-             ... , `grid step size on r[0] dimension`` / 4).
+            (``grid step size on r_1 dimension`` / 4, ``grid step size on r_2 dimension`` / 4, ...
+             , `grid step size on r_N dimension`` / 4).
         :type r_noise_std: tuple[int, int, ... , int], optional, defaults to None
         :raises ValueError: When provided with unknown methods.
     """
