@@ -352,7 +352,7 @@ class BaseSolver(ABC):
             Each function should accept the ``solver`` instance itself as its **only** argument.
         :rtype callbacks: list[callable]
         :param progress_bar: if set to True, prints a dynamically updating progressbar, an estimation of how much
-            time is left for the training to be done and the amount of epochs per second that are been computed
+            time is left for the training to be done and the amount of epochs per second that are been computed.
             Defaults to False
         :type progress_bar: bool
 

@@ -342,9 +342,9 @@ class GeneratorND(BaseGenerator):
             Defaults to ['equally-spaced', 'equally-spaced'].
         :type methods: list[str, str, ... , str], or it can be str if N=1, optional
         :param noisy:
-            if set to True a normal noise will be added to all of the N set of points that make the generator.
+            if set to True a normal noise will be added to all of the N sets of points that make the generator.
             Defaults to True.
-        :type: methods: bool
+        :type noisy: bool
         :param r_noise_std:
             The standard deviation of the noise on the N dimensions.
             If not specified, the default value will be

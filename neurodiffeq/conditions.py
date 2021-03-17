@@ -286,8 +286,10 @@ class IVP_bundle(BaseCondition):
 
         :param output_tensor: Output of the neural network.
         :type output_tensor: `torch.Tensor`
-        :param t: Input to the neural network; i.e., sampled time-points; i.e., independent variables.
+        :param t: First input to the neural network; i.e., sampled time-points; i.e., independent variables.
         :type t: `torch.Tensor`
+        :param parameters: Second input to the neural network; i.e., sampled parameter-points
+        :type parameters: tuple[torch.Tensor]
         :return: The re-parameterized output of the network.
         :rtype: `torch.Tensor`
         """
