@@ -6,6 +6,7 @@ from pytest import raises, warns, deprecated_call
 from neurodiffeq.generators import Generator1D
 from neurodiffeq.generators import Generator2D
 from neurodiffeq.generators import Generator3D
+from neurodiffeq.generators import GeneratorND
 from neurodiffeq.generators import GeneratorSpherical
 # complex generator classes
 from neurodiffeq.generators import ConcatGenerator
@@ -131,6 +132,89 @@ def test_generator3d():
     x, y, z = generator.getter()
     assert _check_shape_and_grad(generator, size, x, y, z)
     assert _check_boundary((x, y, z), (x_min, y_min, z_min), (x_max, y_max, z_max))
+
+    print('testing generator name: ', generator)
+
+
+def test_generatorNd():
+    grid = (5, 6, 7, 8)
+    size = grid[0] * grid[1] * grid[2] * grid[3]
+    r_1_min, r_1_max = 0.0, 1.0
+    r_2_min, r_2_max = 1.0, 2.0
+    r_3_min, r_3_max = 2.0, 3.0
+    r_4_min, r_4_max = 3.0, 4.0
+    r_1_std, r_2_std, r_3_std, r_4_std = 0.05, 0.06, 0.07, 0.08
+
+    methods = ['uniform' for m in range(len(grid))]
+
+    generator = GeneratorND(grid=grid, r_min=(r_1_min, r_2_min, r_3_min, r_4_min),
+                            r_max=(r_1_max, r_2_max, r_3_max, r_4_max),
+                            methods=methods, noisy=False)
+    r_1, r_2, r_3, r_4 = generator.getter()
+    assert _check_shape_and_grad(generator, size, r_1, r_2, r_3, r_4)
+
+    methods = ['equally-spaced' for m in range(len(grid))]
+
+    generator = GeneratorND(grid=grid, r_min=(r_1_min, r_2_min, r_3_min, r_4_min),
+                            r_max=(r_1_max, r_2_max, r_3_max, r_4_max),
+                            methods=methods, noisy=True)
+    r_1, r_2, r_3, r_4 = generator.getter()
+    assert _check_shape_and_grad(generator, size, r_1, r_2, r_3, r_4)
+
+    generator = GeneratorND(grid=grid, r_min=(r_1_min, r_2_min, r_3_min, r_4_min),
+                            r_max=(r_1_max, r_2_max, r_3_max, r_4_max),
+                            methods=methods, noisy=True, r_noise_std=(r_1_std, r_2_std, r_3_std, r_4_std))
+    r_1, r_2, r_3, r_4 = generator.getter()
+    assert _check_shape_and_grad(generator, size, r_1, r_2, r_3, r_4)
+
+    generator = GeneratorND(grid=grid, r_min=(r_1_min, r_2_min, r_3_min, r_4_min),
+                            r_max=(r_1_max, r_2_max, r_3_max, r_4_max),
+                            methods=methods, noisy=False)
+    r_1, r_2, r_3, r_4 = generator.getter()
+    assert _check_shape_and_grad(generator, size, r_1, r_2, r_3, r_4)
+
+    methods = ['log-spaced' for m in range(len(grid))]
+
+    generator = GeneratorND(grid=grid, r_min=(r_1_min, r_2_min, r_3_min, r_4_min),
+                            r_max=(r_1_max, r_2_max, r_3_max, r_4_max),
+                            methods=methods, noisy=True)
+    r_1, r_2, r_3, r_4 = generator.getter()
+    assert _check_shape_and_grad(generator, size, r_1, r_2, r_3, r_4)
+
+    generator = GeneratorND(grid=grid, r_min=(r_1_min, r_2_min, r_3_min, r_4_min),
+                            r_max=(r_1_max, r_2_max, r_3_max, r_4_max),
+                            methods=methods, noisy=False)
+    r_1, r_2, r_3, r_4 = generator.getter()
+    assert _check_shape_and_grad(generator, size, r_1, r_2, r_3, r_4)
+
+    methods = ['backwards-log-spaced' for m in range(len(grid))]
+
+    generator = GeneratorND(grid=grid, r_min=(r_1_min, r_2_min, r_3_min, r_4_min),
+                            r_max=(r_1_max, r_2_max, r_3_max, r_4_max),
+                            methods=methods, noisy=True)
+    r_1, r_2, r_3, r_4 = generator.getter()
+    assert _check_shape_and_grad(generator, size, r_1, r_2, r_3, r_4)
+
+    generator = GeneratorND(grid=grid, r_min=(r_1_min, r_2_min, r_3_min, r_4_min),
+                            r_max=(r_1_max, r_2_max, r_3_max, r_4_max),
+                            methods=methods, noisy=False)
+    r_1, r_2, r_3, r_4 = generator.getter()
+    assert _check_shape_and_grad(generator, size, r_1, r_2, r_3, r_4)
+
+    methods = ['uniform', 'equally-spaced', 'log-spaced', 'backwards-log-spaced']
+
+    generator = GeneratorND(grid=grid, r_min=(r_1_min, r_2_min, r_3_min, r_4_min),
+                            r_max=(r_1_max, r_2_max, r_3_max, r_4_max),
+                            methods=methods, noisy=True)
+    r_1, r_2, r_3, r_4 = generator.getter()
+    assert _check_shape_and_grad(generator, size, r_1, r_2, r_3, r_4)
+
+    generator = GeneratorND(grid=grid, r_min=(r_1_min, r_2_min, r_3_min, r_4_min),
+                            r_max=(r_1_max, r_2_max, r_3_max, r_4_max),
+                            methods=methods, noisy=False)
+    r_1, r_2, r_3, r_4 = generator.getter()
+    assert _check_shape_and_grad(generator, size, r_1, r_2, r_3, r_4)
+    assert _check_boundary((r_1, r_2, r_3, r_4), (r_1_min, r_2_min, r_3_min, r_4_min), (r_1_max, r_2_max, r_3_max, r_4_max))
 
     print('testing generator name: ', generator)
 
