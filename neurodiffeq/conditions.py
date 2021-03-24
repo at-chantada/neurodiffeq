@@ -295,19 +295,19 @@ class IVP_bundle(BaseCondition):
         """
 
         if callable(self.u_0):
-            u_ini = self.u_0(self.t_0, *parameters)
+            u_zero = self.u_0(self.t_0, *parameters)
         elif isinstance(self.u_0, float) or isinstance(self.u_0, int):
-            u_ini = self.u_0
+            u_zero = self.u_0
 
         if callable(self.u_0_prime):
-            u_ini_prime = self.u_0_prime(self.t_0, *parameters)
+            u_zero_prime = self.u_0_prime(self.t_0, *parameters)
         elif isinstance(self.u_0_prime, float) or isinstance(self.u_0_prime, int):
-            u_ini_prime = self.u_0_prime
+            u_zero_prime = self.u_0_prime
 
         if self.u_0_prime is None:
-            return u_ini + (1 - torch.exp(-t + self.t_0)) * output_tensor
+            return u_zero + (1 - torch.exp(-t + self.t_0)) * output_tensor
         else:
-            return u_ini + (t - self.t_0) * u_ini_prime + ((1 - torch.exp(-t + self.t_0)) ** 2) * output_tensor
+            return u_zero + (t - self.t_0) * u_zero_prime + ((1 - torch.exp(-t + self.t_0)) ** 2) * output_tensor
 
 
 class IVP_bundle_alt(BaseCondition):
@@ -423,6 +423,61 @@ class DirichletBVP(BaseCondition):
         t_tilde = (t - self.t_0) / (self.t_1 - self.t_0)
         return self.u_0 * (1 - t_tilde) \
                + self.u_1 * t_tilde \
+               + (1 - torch.exp((1 - t_tilde) * t_tilde)) * output_tensor
+
+
+class DirichletBVP_bundle(BaseCondition):
+    r"""A double-ended Dirichlet boundary condition:
+    :math:`u(t_0,\boldsymbol{\theta})=u_0(\boldsymbol{\theta})` and :math:`u(t_1,\boldsymbol{\theta})=u_1(\boldsymbol{\theta})`.
+
+    Here :math:`\boldsymbol{\theta}=(\theta_{1},\theta_{2},...,\theta_{n})\in\mathbb{R}`,
+    where each :math:`\theta_i` represents a parameter of the ODE system that we want to solve
+
+    :param t_0: The initial time.
+    :type t_0: float
+    :param u_0: The initial value of :math:`u`. :math:`u(t_0,\boldsymbol{\theta})=u_0(\boldsymbol{\theta})`.
+    :type u_0: callable or float
+    :param t_1: The final time.
+    :type t_1: callable or float
+    :param u_1: The initial value of :math:`u`. :math:`u(t_1,\boldsymbol{\theta})=u_1(\boldsymbol{\theta})`.
+    :type u_1: float
+    """
+
+    @deprecated_alias(x_0='u_0', x_1='u_1')
+    def __init__(self, t_0, u_0, t_1, u_1):
+        super().__init__()
+        self.t_0, self.u_0, self.t_1, self.u_1 = t_0, u_0, t_1, u_1
+
+    def parameterize(self, output_tensor, t, *parameters):
+        r"""Re-parameterizes outputs such that the Dirichlet condition is satisfied on both ends of the domain.
+
+        The re-parameterization is
+        :math:`\displaystyle u(t,\boldsymbol{\theta})=(1-\tilde{t})u_0(\boldsymbol{\theta})+\tilde{t}u_1(\boldsymbol{\theta})+\left(1-e^{(1-\tilde{t})\tilde{t}}\right)\mathrm{ANN}(t,\boldsymbol{\theta})`,
+        where :math:`\displaystyle \tilde{t} = \frac{t-t_0}{t_1-t_0}` and :math:`\mathrm{ANN}` is the neural network.
+
+        :param output_tensor: Output of the neural network.
+        :type output_tensor: `torch.Tensor`
+        :param t: Input to the neural network; i.e., sampled time-points or another independent variable.
+        :type t: `torch.Tensor`
+        :param parameters: Second input to the neural network; i.e., sampled parameter-points
+        :type parameters: tuple[torch.Tensor]
+        :return: The re-parameterized output of the network.
+        :rtype: `torch.Tensor`
+        """
+
+        if callable(self.u_0):
+            u_zero = self.u_0(self.t_0, *parameters)
+        elif isinstance(self.u_0, float) or isinstance(self.u_0, int):
+            u_zero = self.u_0
+
+        if callable(self.u_1):
+            u_one = self.u_1(self.t_1, *parameters)
+        elif isinstance(self.u_1, float) or isinstance(self.u_1, int):
+            u_one = self.u_1
+
+        t_tilde = (t - self.t_0) / (self.t_1 - self.t_0)
+        return u_zero * (1 - t_tilde) \
+               + u_one * t_tilde \
                + (1 - torch.exp((1 - t_tilde) * t_tilde)) * output_tensor
 
 
