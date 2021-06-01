@@ -295,6 +295,258 @@ class BundleIVP(BaseCondition):
                 return u_0 + (t - t_0) * u_0_prime + ((1 - torch.exp(-t + t_0)) ** 2) * output_tensor
 
 
+class CustomBundleIVP(BaseCondition):
+    r"""An initial value problem of one of the following forms:
+
+    - Dirichlet condition: :math:`u(t_0,\boldsymbol{\theta})=u_0`.
+    - Neumann condition: :math:`\displaystyle\frac{\partial u}{\partial t}\bigg|_{t = t_0}(\boldsymbol{\theta}) = u_0'`.
+
+    Here :math:`\boldsymbol{\theta}=(\theta_{1},\theta_{2},...,\theta_{n})\in\mathbb{R}^n`,
+    where each :math:`\theta_i` represents a parameter, or a condition, of the ODE system that we want to solve.
+
+    :param t_0: The initial time.
+    :type t_0: float
+    :param u_0: The initial value of :math:`u`. :math:`u(t_0,\boldsymbol{\theta})=u_0`.
+    :type u_0: float
+    :param u_0_prime:
+        The initial derivative of :math:`u` w.r.t. :math:`t`.
+        :math:`\displaystyle\frac{\partial u}{\partial t}\bigg|_{t = t_0}(\boldsymbol{\theta}) = u_0'`.
+        Defaults to None.
+    :type u_0_prime: float, optional
+    :param bundle_conditions:
+        The initial conditions that will be included in the total bundle,
+        in addition to the parameters of the ODE system.
+        The conditions listed in bundle_conditions (e.g bundle_conditions={'t_0': 0, 'u_0': 1, 'u_0_prime': 2}),
+        must be listed in the same order that will be used in ``neurodiffeq.solvers.BundleSolver1D``,
+        when listing theta_min and theta_max.
+        Defaults to []
+    :type bundle_conditions: dictionary{str: int, ..., str: int}
+    """
+
+    @deprecated_alias(x_0='u_0', x_0_prime='u_0_prime')
+    def __init__(self, t_0=None, u_0=None, u_0_prime=None, bundle_conditions={}, function=None):
+        super().__init__()
+        self.t_0, self.u_0, self.u_0_prime = t_0, u_0, u_0_prime
+        self.bundle_conditions = bundle_conditions
+        self.function = function
+
+    def parameterize(self, output_tensor, t, *theta):
+        r"""Re-parameterizes outputs such that the Dirichlet/Neumann condition is satisfied.
+
+        if t_0 is not included in the bundle:
+
+        - For Dirichlet condition, the re-parameterization is
+          :math:`\displaystyle u(t,\boldsymbol{\theta}) = u_0 + \left(1 - e^{-(t-t_0)}\right)`
+          :math:`\mathrm{ANN}(t,\boldsymbol{\theta})`
+        - For Neumann condition, the re-parameterization is
+          :math:`\displaystyle u(t,\boldsymbol{\theta}) = u_0 + (t-t_0) u'_0 + \left(1 - e^{-(t-t_0)}\right)^2`
+          :math:`\mathrm{ANN}(t,\boldsymbol{\theta})`
+
+        if t_0 is included in the bundle:
+
+        - For Dirichlet condition, the re-parameterization is
+          :math:`\displaystyle u(t,\boldsymbol{\theta}) = u_0 + \left(t - t_0\right)`
+          :math:`\mathrm{ANN}(t,\boldsymbol{\theta})`
+        - For Neumann condition, the re-parameterization is
+          :math:`\displaystyle u(t,\boldsymbol{\theta}) = u_0 + (t-t_0) u'_0 + \left(t - t_0\right)^2`
+          :math:`\mathrm{ANN}(t,\boldsymbol{\theta})`
+
+        Where :math:`\mathrm{ANN}` is the neural network.
+
+        :param output_tensor: Output of the neural network.
+        :type output_tensor: `torch.Tensor`
+        :param t: First input to the neural network; i.e., sampled time-points; i.e., independent variables.
+        :type t: `torch.Tensor`
+        :param theta: Rest of the inputs to the neural network; i.e., sampled bundle-points
+        :type theta: tuple[torch.Tensor, ..., torch.Tensor]
+        :return: The re-parameterized output of the network.
+        :rtype: `torch.Tensor`
+        """
+
+        t_0, u_0, u_0_prime = self.t_0, self.u_0, self.u_0_prime
+        if 'u_0' in self.bundle_conditions:
+            u_0 = theta[self.bundle_conditions['u_0']]
+        if 'u_0_prime' in self.bundle_conditions:
+            u_0_prime = theta[self.bundle_conditions['u_0_prime']]
+        if self.function:
+            u_0 = self.function(u_0)
+        if 't_0' in self.bundle_conditions:
+
+            t_0 = theta[self.bundle_conditions['t_0']]
+
+            if self.u_0_prime is None and 'u_0_prime' not in self.bundle_conditions:
+                return u_0 + (t - t_0) * output_tensor
+            else:
+                return u_0 + (t - t_0) * u_0_prime + ((t - t_0) ** 2) * output_tensor
+        else:
+            if self.u_0_prime is None and 'u_0_prime' not in self.bundle_conditions:
+                return u_0 + (1 - torch.exp(-t + t_0)) * output_tensor
+            else:
+                return u_0 + (t - t_0) * u_0_prime + ((1 - torch.exp(-t + t_0)) ** 2) * output_tensor
+
+
+class TaylorIVP(BaseCondition):
+    r"""An initial value problem of one of the following forms:
+
+    - Dirichlet condition: :math:`u(t_0)=u_0`.
+    - Neumann condition: :math:`\displaystyle\frac{\partial u}{\partial t}\bigg|_{t = t_0} = u_0'`.
+
+    :param t_0: The initial time.
+    :type t_0: float
+    :param u_0: The initial value of :math:`u`. :math:`u(t_0)=u_0`.
+    :type u_0: float
+    :param u_0_prime:
+        The initial derivative of :math:`u` w.r.t. :math:`t`.
+        :math:`\displaystyle\frac{\partial u}{\partial t}\bigg|_{t = t_0} = u_0'`.
+        Defaults to None.
+    :type u_0_prime: float, optional
+    """
+
+    @deprecated_alias(x_0='u_0', x_0_prime='u_0_prime')
+    def __init__(self, t_0, u_0=None, u_0_prime=None):
+        super().__init__()
+        self.t_0, self.u_0, self.u_0_prime = t_0, u_0, u_0_prime
+
+    def parameterize(self, output_tensor, t, *theta):
+        r"""Re-parameterizes outputs such that the Dirichlet/Neumann condition is satisfied.
+
+        - For Dirichlet condition, the re-parameterization is
+          :math:`\displaystyle u(t) = u_0 + \left(1 - e^{-(t-t_0)}\right) \mathrm{ANN}(t)`
+          where :math:`\mathrm{ANN}` is the neural network.
+        - For Neumann condition, the re-parameterization is
+          :math:`\displaystyle u(t) = u_0 + (t-t_0) u'_0 + \left(1 - e^{-(t-t_0)}\right)^2 \mathrm{ANN}(t)`
+          where :math:`\mathrm{ANN}` is the neural network.
+
+        :param output_tensor: Output of the neural network.
+        :type output_tensor: `torch.Tensor`
+        :param t: Input to the neural network; i.e., sampled time-points; i.e., independent variables.
+        :type t: `torch.Tensor`
+        :return: The re-parameterized output of the network.
+        :rtype: `torch.Tensor`
+        """
+        if self.u_0_prime is None:
+            return self.u_0(t, *theta) + (1 - torch.exp(-t + self.t_0)) * output_tensor
+        else:
+            return self.u_0(t, *theta) + (1 - torch.exp(-t + self.t_0) ** 2) * output_tensor
+
+
+class IVP_bundle_alt2(BaseCondition):
+
+    @deprecated_alias(x_0='u_0', x_0_prime='u_0_prime')
+    def __init__(self, t_0, parameter_0, u_0, reparam='ANNexp'):
+        super().__init__()
+        self.t_0, self.parameter_0, self.u_0, self.reparam = t_0, parameter_0, u_0, reparam
+
+    def enforce(self, net, t, parameter, *parameters):
+
+        def ANN(*r):
+            out = net(torch.cat([*r], dim=1))
+            if self.ith_unit is not None:
+                out = out[:, self.ith_unit].view(-1, 1)
+            return out
+
+        t0 = self.t_0 * torch.ones_like(t, requires_grad=True)
+        p0 = self.parameter_0 * torch.ones_like(parameter, requires_grad=True)
+        utp = ANN(t, parameter, *parameters)
+        ut0p = ANN(t0, parameter, *parameters)
+        utp0 = ANN(t, p0, *parameters)
+        ut0p0 = ANN(t0, p0, *parameters)
+
+        return self.parameterize(utp, t, ut0p, p0, utp0, ut0p0, parameter, *parameters)
+
+    def parameterize(self, utp, t, ut0p, p0, utp0, ut0p0, parameter, *parameters):
+
+        # A = self.u_0(self.t_0, parameter, *parameters) + (1 - parameter - self.parameter_0) * \
+        #     (self.u_0(t, self.parameter_0, *parameters) - self.u_0(self.t_0, self.parameter_0, *parameters))
+
+        # A = self.u_0(self.t_0, parameter, *parameters) + torch.exp(-parameter + self.parameter_0) * \
+        #     (self.u_0(t, self.parameter_0, *parameters) - self.u_0(self.t_0, self.parameter_0, *parameters))
+
+        # A = self.u_0(self.t_0, parameter, *parameters) + (1 - parameter - self.parameter_0) * \
+        #     (self.u_0(t, parameter, *parameters) - self.u_0(self.t_0, parameter, *parameters))
+
+        # A = self.u_0(self.t_0, parameter, *parameters) + torch.exp(-parameter + self.parameter_0) * \
+        #     (self.u_0(t, parameter, *parameters) - self.u_0(self.t_0, parameter, *parameters))
+
+        A = self.u_0(t, parameter, *parameters)
+
+        if self.reparam == 'linexp':
+            return A + (t - self.t_0) * (1 - torch.exp(-parameter + self.parameter_0)) * utp
+
+        elif self.reparam == 'expexp':
+            return A + (1 - torch.exp(-t + self.t_0)) * (1 - torch.exp(-parameter + self.parameter_0)) * utp
+
+        elif self.reparam == 'exp2exp':
+            return A + (1 - torch.exp((-t + self.t_0) ** 2)) * (1 - torch.exp(-parameter + self.parameter_0)) * utp
+
+        elif self.reparam == 'expexp2':
+            return A + (1 - torch.exp((-t + self.t_0) ** 2)) * (1 - torch.exp(-parameter + self.parameter_0)) * utp
+
+        elif self.reparam == 'exp2exp2':
+            return A + (1 - torch.exp((-t + self.t_0) ** 2)) * (1 - torch.exp((-parameter + self.parameter_0) ** 2)) * utp
+
+        elif self.reparam == 'expcauchy':
+            return A + (1 - torch.exp(-t + self.t_0)) * ((1 - torch.exp(-parameter + self.parameter_0)) ** 2) * utp
+
+        elif self.reparam == 'cauchyexp':
+            return A + ((1 - torch.exp(-t + self.t_0)) ** 2) * (1 - torch.exp(-parameter + self.parameter_0)) * utp
+
+        elif self.reparam == 'cauchyANN':
+            return A + ((1 - torch.exp(-t + self.t_0)) ** 2) * (utp - utp0)
+
+        elif self.reparam == 'ANNcauchy':
+            return A + (utp - ut0p) * ((1 - torch.exp(-parameter + self.parameter_0)) ** 2)
+
+        elif self.reparam == 'totalANN':
+            return A + utp - utp0 - ut0p + ut0p0
+
+        elif self.reparam == 'totalANNsquared2':
+            return A + (utp ** 2) - (utp0 ** 2) - (ut0p ** 2) + (ut0p0 ** 2)
+
+        elif self.reparam == 'totalANNcubed':
+            return A + ((utp - utp0 - ut0p + ut0p0) ** 3)
+
+        elif self.reparam == 'newcauchyexp':
+            return A + ((t - self.t_0) ** 2) * (1 - torch.exp(-parameter + self.parameter_0)) * utp
+
+        elif self.reparam == 'newcauchynewcauchy':
+            return A + ((t - self.t_0) ** 2) * ((parameter - self.parameter_0) ** 2) * utp
+
+        elif self.reparam == 'cauchycauchy':
+            return A + ((1 - torch.exp(-t + self.t_0)) ** 2) * ((1 - torch.exp(-parameter + self.parameter_0)) ** 2) * utp
+
+        elif self.reparam == 'cauchycauchy2':
+            return A + ((1 - torch.exp(-t + self.t_0)) ** 2) * ((1 - torch.exp(2 * (-parameter + self.parameter_0))) ** 2) * utp
+
+        elif self.reparam == 'explin':
+            return A + (1 - torch.exp(-t + self.t_0)) * (parameter - self.parameter_0) * utp
+
+        elif self.reparam == 'linlin':
+            return A + (self.t_0 - t) * (parameter - self.parameter_0) * utp
+
+        elif self.reparam == 'ANNexp':
+            return A + (utp - ut0p) * (1 - torch.exp(-parameter + self.parameter_0)) * utp  # param default
+
+        elif self.reparam == 'ANNsquaredexp':
+            return A + ((utp - ut0p) ** 2) * (1 - torch.exp(-parameter + self.parameter_0)) * utp  # param default
+
+        elif self.reparam == 'ANNexp2':
+            return A + (utp - ut0p) * (1 - torch.exp(-parameter + self.parameter_0))
+
+        elif self.reparam == 'ANNsquaredexp2':
+            return A + ((utp - ut0p) ** 2) * (1 - torch.exp(-parameter + self.parameter_0))
+
+        elif self.reparam == 'ANNlin':
+            return A + (utp - ut0p) * (parameter - self.parameter_0) * utp  # param 4
+
+        elif self.reparam == 'ANNANN':
+            return A + (utp - ut0p) * (utp - utp0) * utp  # param 5
+
+        elif self.reparam == 'ANNANN2':
+            return A + (utp - ut0p) * (utp - utp0)
+        # return A
+
+
 class DirichletBVP(BaseCondition):
     r"""A double-ended Dirichlet boundary condition:
     :math:`u(t_0)=u_0` and :math:`u(t_1)=u_1`.
